@@ -1,0 +1,3 @@
+<clickhouse>
+    <local_filesystem_read_method>pread</local_filesystem_read_method>
+</clickhouse>

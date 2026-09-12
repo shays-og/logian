@@ -1,0 +1,66 @@
+# Pinned to clickhouse/clickhouse-server:24.8-alpine per your hardware
+# constraint. Run with: docker compose up -d
+#
+# Resource limits below are conservative starting points, not measured
+# numbers for your specific box — watch `docker stats` under load and
+# raise/lower as needed. ClickHouse's own defaults assume it owns the
+# whole machine, which is a bad assumption on older/shared hardware,
+# so we cap it explicitly rather than letting it self-tune.
+# `cpus:` is a hard ceiling capped by however many cores Docker sees on
+# the host — on a 1-CPU box the max any single service can request is 1.
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest  
+    container_name: logian-clickhouse
+    environment:
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=devpassword
+    ports:
+      - "8123:8123" # HTTP interface (clickhouse-client --host, curl, etc.)
+      - "9000:9000" # native protocol — used by this ingestion server and Grafana
+    volumes:
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - ./clickhouse/config.d/listen_host.xml:/etc/clickhouse-server/config.d/listen_host.xml:ro
+      # If you hit the same stuck-on-startup symptom we saw on the old
+      # machine, it was traced to WSL2's io_uring handling, not
+      # hardware — that can follow you to a new Windows/Docker Desktop
+      # box. If so, uncomment this line (file content is the 3-line
+      # <clickhouse><local_filesystem_read_method>pread</...></clickhouse>
+      # override from earlier in this conversation):
+      # - ./ch-config/disable-io-uring.xml:/etc/clickhouse-server/config.d/disable-io-uring.xml:ro
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    mem_limit: 1g
+    cpus: 1
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: logian-grafana
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
+      - CLICKHOUSE_HOST=clickhouse # resolves via the compose network — no manual network setup needed
+      - CLICKHOUSE_PORT=9000
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    mem_limit: 512m
+    cpus: 1
+
+volumes:
+  clickhouse-data:
+  grafana-data:

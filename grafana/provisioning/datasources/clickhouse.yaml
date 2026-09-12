@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  - name: Logian ClickHouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    isDefault: true
+    jsonData:
+      host: ${CLICKHOUSE_HOST}
+      port: ${CLICKHOUSE_PORT}
+      protocol: native
+      defaultDatabase: logian
+      username: default
+      tlsSkipVerify: true
+    secureJsonData:
+      password: "devpassword"
+    editable: true
